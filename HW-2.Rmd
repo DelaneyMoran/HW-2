@@ -18,7 +18,7 @@ suppressPackageStartupMessages(library(knitr))
 Please indicate
 
 * Who you collaborated with: none
-* Roughly how much time you spent on this HW: 5 hrs
+* Roughly how much time you spent on this HW: 10 hours
 * What gave you the most trouble:
 * Any comments you have: 
 
