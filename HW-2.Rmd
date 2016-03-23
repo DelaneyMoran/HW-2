@@ -9,6 +9,7 @@ suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(foreign))
 suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(knitr))
 ```
 
 
@@ -37,15 +38,17 @@ pollution <- read.dta(url) %>%
   tbl_df()
 ```
 
-### a)Create a scatterplot of mortality rate vs. level of nitric oxides. Do you think linear regression will fit these data well? Fit the regression and evaluate a residual plot from the regression.
+### a)
+####Create a scatterplot of mortality rate vs. level of nitric oxides. Do you think linear regression will fit these data well? Fit the regression and evaluate a residual plot from the regression.
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
-plot1 <- ggplot(pollution, aes(x = nox, y = mort)) + geom_point()
+plot1 <- ggplot(pollution, aes(x = nox, y = mort)) + 
+  geom_point()
 
 model1 <- lm(mort ~ nox, data = pollution)
 
 b <- coefficients(model1)
-b
+             
 plot1 + 
   geom_smooth(method = "lm", se = FALSE) + 
   ggtitle("Mortality Rate by NOx Level") +
@@ -55,7 +58,8 @@ plot1 +
 ```
 The regression is heavily skewed by the vertical spread of y values at low levels of x, and the few data points at large values of x.
 
-### b)Find an appropriate transformation that will result in data more appropriate for linear regression. Fit a regression to the transformed data and evaluate a new residual plot.
+### b)
+####Find an appropriate transformation that will result in data more appropriate for linear regression. Fit a regression to the transformed data and evaluate a new residual plot.
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 pollution2 <- mutate(pollution, log_nox = log(nox))
@@ -68,48 +72,80 @@ plot2 +
   ggtitle("Mortality Rate by NOx Level") +
   xlab("Log NOx level") +
   ylab("Mortality Rate")
-
 ```
 
-### c) Interpret the slope coefficient from the model you chose in b.
+### c) 
+####Interpret the slope coefficient from the model you chose in b.
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 coefficients(model2)
 ```
-For every increase of 1 in NOx, there is a multiplicative increase of e to the 15 in mortality. (This seems HUGE...)
+For every increase of 1 in NOx, there is a 15 point increase in mortality.
 
-### d) Now fit a model predicting mortality rate using levels of nitric oxides, sulfur dioxide, and hydrocarbons as inputs. Use appropriate transformations when helpful. Plot the fitted regression model and interpret the coeffiecients. 
+### d) 
+####Now fit a model predicting mortality rate using levels of nitric oxides, sulfur dioxide, and hydrocarbons as inputs. Use appropriate transformations when helpful. Plot the fitted regression model and interpret the coeffiecients. 
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
-pollution2 <- mutate(pollution2, log_so2 = log(so2))
-pollution2 <- mutate(pollution2, log_hc = log(hc))
+pollution2 <- mutate(pollution2, log_so2 = log(so2),
+                     log_hc = log(hc))
 
 model3 <- lm(mort ~ log_nox + log_so2 + log_hc, data = pollution2)
 model3
 
-ggplot(pollution2, aes(x = log_nox, y = mort)) + geom_point()
-ggplot(pollution2, aes(x = log_so2, y = mort)) + geom_point()
-ggplot(pollution2, aes(x = log_hc, y = mort)) + geom_point()
+plot3 <- ggplot(pollution2, aes(x = log_so2, y = mort, color = log_nox, size = log_hc)) + 
+  geom_point() +
+  ggtitle("Mortality by Particulate Matter") +
+  xlab("Log SO2 levels") +
+  ylab("Mortality") 
+
+plot3 + geom_smooth(method = "lm", se = FALSE) 
 
 ```
-Is there a way to combine these plots somehow and show the regression line?
-Also again the coefficients seem really big to me. Am I not interpretting them right? Each increase of 1 along the x axis corresponds to a multiplicative increase of e^coeff ?
+Each increase of 1 in SO2 level corresponds to an increase of 11.76 in mortality. Similarly, every increase in NOx is associated with an increase of 58.34 in mortality. Surprisingly, hydrocarbons are negatively associated with mortality, such that an increase of 1 in hc is associated with a decrease in mortality of 57.30. 
 
-### e)Cross-validate: fit the model you chose above to the first half of the data and then predict for the second half. (You used all the data to construct the model in d, so this is not really cross-validation, but it gives a sense of how the steps of cross-validation can be implemented.)
+### e)
+####Cross-validate: fit the model you chose above to the first half of the data and then predict for the second half. (You used all the data to construct the model in d, so this is not really cross-validation, but it gives a sense of how the steps of cross-validation can be implemented.)
 
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 
+pollution<- mutate(pollution, log_so2 = log(so2),
+                     log_hc = log(hc),
+                     log_nox = log(nox))
+
+pollutiontrain <- sample_frac(pollution, 0.7)
+id <- as.numeric(rownames(pollutiontrain))
+
+pollutiontest<- pollution[-id,]
+
+
+model4 <- lm(mort ~ log_nox + log_so2 + log_hc, data = pollutiontrain)
+model4
+
+pollutiontest <- mutate(pollutiontest, predictions = predict(model4, pollutiontest)) 
+
+
+modelcheck <- lm(mort ~ predictions, data = pollutiontest)
+
+summary(modelcheck)
+modelcheck
+confint(modelcheck)
+
+polplot <- ggplot(pollutiontest, aes(x = predictions, y = mort)) + 
+  geom_point() +
+  stat_smooth(method = "lm") +
+  xlab("Predicted Mortality Rates") +
+  ylab("Observed Mortality Rates") +
+  ggtitle("Prediction Analysis")
+polplot
 
 ```
+If the model worked perfectly, we would expect to see the line y = x when plotting predicted vs observed rates. Depending on the sample fraction used, a better-fitting model can be reliably produced. I was finding very variable slopes when I used only half the dataset to train the model, so switched to 0.7. Still the model changes with each run because it is based off of a random sample of the data. 
 
+### f) 
+####What do you think are the reasons for using cross-validation?
 
-### f) What do you think are the reasons for using cross-validation?
-
-
-```{r, echo=FALSE, fig.width=12, fig.height=6}
-
-```
+The reason to cross-validate is to make sure the model isn't too specific. With a small data set, it is possible to create a very good model that predicts every data point very closely. However, it is hard to know if such a perfect model is generalizable. One way to test the model is to use only a portion of the data to make the model and then test it on the other portion.
 
 
 
@@ -139,12 +175,13 @@ profiles <- read.csv("profiles.csv", header=TRUE) %>% tbl_df()
 profiles <- mutate(profiles, is_female = ifelse(sex == "f", 1, 0))
 
 # Split off the essays into a separate data.frame
-essays <- select(profiles, is_female, contains("essay"))
+essays <- select(profiles, is_female, sex, contains("essay"))
 profiles2 <- select(profiles, -contains("essay"))
+
 
 ```
 
-#Some Demographics
+###Some Demographics
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 
 #HEIGHT
@@ -162,9 +199,10 @@ ggplot(data=profiles2, aes(x=age, y=..density..)) +
 #ORIENTATION
 orientations <- select(profiles2, sex, orientation) 
 
-orientations <- mutate(orientations, is_bisexual = ifelse(orientation == "bisexual", 1, 0))
-orientations <- mutate(orientations, is_gay = ifelse(orientation == "gay", 1, 0))
-orientations <- mutate(orientations, is_straight = ifelse(orientation == "straight", 1, 0))
+orientations <- mutate(orientations, is_bisexual = ifelse(orientation == "bisexual", 1, 0),
+                       is_gay = ifelse(orientation == "gay", 1, 0),
+                       is_straight = ifelse(orientation == "straight", 1, 0))
+
                       
 prop_orientations <- group_by(orientations, sex) %>% 
   summarise(bisexual = mean(is_bisexual),
@@ -196,22 +234,24 @@ ggplot(income, aes(x = sex, y = income)) +
 ```
 Note that height and income differ by gender, while age and sexual orientation are pretty similar.
 
-#More Personal:
+
+###More Personal:
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 #BODY TYPE BY GENDER
 bodytype <- profiles2 %>% 
   select(body_type, sex)
 
-bodytype<- mutate(bodytype, is_curvy = ifelse(body_type == "curvy", 1, 0))
-bodytype <- mutate(bodytype, is_skinny = ifelse(body_type == "skinny", 1, 0))
-bodytype <- mutate(bodytype, is_athletic = ifelse(body_type == "athletic", 1, 0))
-bodytype <- mutate(bodytype, is_thin = ifelse(body_type == "thin", 1, 0))
-bodytype <- mutate(bodytype, is_average = ifelse(body_type == "average", 1, 0))
-bodytype <- mutate(bodytype, is_fit = ifelse(body_type == "fit", 1, 0))
-bodytype <- mutate(bodytype, is_extra = ifelse(body_type == "a little extra", 1, 0))
-bodytype <- mutate(bodytype, is_full = ifelse(body_type == "full figured", 1, 0))
-bodytype <- mutate(bodytype, is_jacked = ifelse(body_type == "jacked", 1, 0))
-bodytype <- mutate(bodytype, is_nope = ifelse(body_type == "rather not say", 1, 0))
+bodytype<- mutate(bodytype, is_curvy = ifelse(body_type == "curvy", 1, 0),
+                  is_skinny = ifelse(body_type == "skinny", 1, 0),
+                  is_athletic = ifelse(body_type == "athletic", 1, 0),
+                  is_thin = ifelse(body_type == "thin", 1, 0),
+                  is_average = ifelse(body_type == "average", 1, 0),
+                  is_fit = ifelse(body_type == "fit", 1, 0),
+                  is_extra = ifelse(body_type == "a little extra", 1, 0),
+                  is_full = ifelse(body_type == "full figured", 1, 0),
+                  is_jacked = ifelse(body_type == "jacked", 1, 0),
+                  is_nope = ifelse(body_type == "rather not say", 1, 0))
+
 
 bodytype <- bodytype %>% 
   group_by(sex) %>% 
@@ -235,9 +275,10 @@ ggplot(bodytype, aes(x = body, y = prop, fill = sex)) +
 
 
 #DRUG USE BY GENDER
-profiles2 <- mutate(profiles2, drugs_never = ifelse(drugs == "never", 1, 0))
-profiles2 <- mutate(profiles2, drugs_sometimes = ifelse(drugs == "sometimes", 1, 0))
-profiles2 <- mutate(profiles2, drugs_often = ifelse(drugs == "often", 1, 0))
+profiles2 <- mutate(profiles2, drugs_never = ifelse(drugs == "never", 1, 0),
+                    drugs_sometimes = ifelse(drugs == "sometimes", 1, 0),
+                    drugs_often = ifelse(drugs == "often", 1, 0))
+
 
 prop_drugs <- profiles2 %>% 
   group_by(sex) %>% 
@@ -260,11 +301,12 @@ ggplot(prop_drugs, aes(x = drug_use, y = prop, fill = sex)) +
 #DRINKS
 drinking <- select(profiles2, sex, drinks)
 
-drinking <- mutate(drinking, drinks_socially = ifelse(drinks == "socially", 1, 0))
-drinking <- mutate(drinking, drinks_often = ifelse(drinks == "often", 1, 0))
-drinking <- mutate(drinking, drinks_rarely = ifelse(drinks == "rarely", 1, 0))
-drinking <- mutate(drinking, drinks_voften = ifelse(drinks == "very often", 1, 0))
-drinking <- mutate(drinking, drinks_naa = ifelse(drinks == "not at all", 1, 0))
+drinking <- mutate(drinking, drinks_socially = ifelse(drinks == "socially", 1, 0),
+                   drinks_often = ifelse(drinks == "often", 1, 0),
+                   drinks_rarely = ifelse(drinks == "rarely", 1, 0),
+                   drinks_voften = ifelse(drinks == "very often", 1, 0),
+                   drinks_naa = ifelse(drinks == "not at all", 1, 0))
+
 
 prop_drinking <- drinking %>% 
   group_by(sex) %>% 
@@ -275,7 +317,14 @@ prop_drinking <- drinking %>%
             not_at_all = mean(drinks_naa)) %>% 
   gather(key = "drinking", value= prop, -sex)
 
-ggplot(prop_drinking, aes(x = drinking, y = prop, fill = sex)) + 
+prop_drinking <- mutate(prop_drinking, 
+      level = ifelse(drinking == "socially", 5,
+              ifelse(drinking == "rarely", 4,
+              ifelse(drinking == "often", 3, 
+              ifelse(drinking == "not_at_all", 2, 1)))))
+
+
+ggplot(prop_drinking, aes(x = reorder(drinking, level), y = prop, fill = sex)) +
   geom_bar(stat = "identity", position = "dodge") +
   xlab("Drinking Habits") +
   ylab("Proportion of OkCupid Users") +
@@ -301,17 +350,17 @@ profile.has.query <- function(data.frame, query){
 #essay contains "read"
 essays$has_read <-profile.has.query(data.frame = essays, query = "read")
 
-read <- group_by(essays, is_female) %>% 
+read <- group_by(essays, sex) %>% 
   summarise(prop_read=mean(has_read))
-knitr::kable(read, col.names = c("Is Female", "Proportion of Respondents Whose Essay Contains 'Read'"))
+knitr::kable(read, digits = 3, col.names = c("Sex", "Proportion of Respondents Whose Essay Contains 'Read'"))
 
 
 #essay contains "cook"
 essays$has_cook <-profile.has.query(data.frame = essays, query = "cook")
 
-cook <- group_by(essays, is_female) %>% 
+cook <- group_by(essays, sex) %>% 
   summarise(prop_read=mean(has_cook))
-knitr::kable(cook, col.names = c("Is Female", "Proportion of Respondents Whose Essay Contains 'Cook'"))
+knitr::kable(cook, digits = 3, col.names = c("Sex", "Proportion of Respondents Whose Essay Contains 'Cook'"))
 
 #essay contains "cars", "motorcycle" or "truck"
 essays$has_cars <-profile.has.query(data.frame = essays, query = "cars")
@@ -320,9 +369,9 @@ essays$has_truck <-profile.has.query(data.frame = essays, query = "truck")
 
 essays<- mutate(essays, vehicles = has_cars + has_truck + has_mcycle)
 
-vehicles <- group_by(essays, is_female) %>% 
+vehicles <- group_by(essays, sex) %>% 
   summarise(prop_vehicles=mean(vehicles))
-knitr::kable(vehicles, col.names = c("Is Female", "Proportion of Respondents Whose Essay Contains 'Cars', 'Truck', or 'Motorcycle'"))
+knitr::kable(vehicles, digits = 3, col.names = c("Sex", "Proportion of Respondents Whose Essay Contains 'Cars', 'Truck', or 'Motorcycle'"))
 
 #essay contains "child" or "kid"
 essays$has_child <- profile.has.query(data.frame = essays, query = "child")
@@ -330,9 +379,9 @@ essays$has_kid <- profile.has.query(data.frame = essays, query = "kid")
 
 essays <- mutate(essays, kidwords = has_child + has_kid)
 
-kidwords <- group_by(essays, is_female) %>% 
+kidwords <- group_by(essays, sex) %>% 
   summarise(prop_kidwords = mean(kidwords))
-knitr::kable(kidwords, col.names = c("Is Female", "Proportion of Respondents Whose Essay Contains 'Child' or 'Kid'"))
+knitr::kable(kidwords, digits = 3, col.names = c("Sex", "Proportion of Respondents Whose Essay Contains 'Child' or 'Kid'"))
 
 
 ```
